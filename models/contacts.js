@@ -1,6 +1,6 @@
 const fs = require("fs").promises;
 const path = require("path");
-const contactsPath = path.resolve("./contacts.json");
+const contactsPath = path.resolve(__dirname, "./contacts.json");
 
 const listContacts = async () => {
   const contacts = await fs.readFile(contactsPath, "utf-8");
@@ -16,7 +16,6 @@ const removeContact = async (contactId) => {
   const contacts = await listContacts();
   const filter = contacts.filter((contact) => contact.id !== contactId);
   await fs.writeFile(contactsPath, JSON.stringify(filter));
-  console.log("Remove contact", contactId);
   return filter;
 };
 
