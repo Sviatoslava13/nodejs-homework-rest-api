@@ -22,7 +22,7 @@ router.get("/", async (req, res, next) => {
 
 router.get("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
-  const contact = await getContactById(contactId);
+  const contact = await getContactById(contactId, req.user._id);
   if (!contact) {
     res.status(404).json({
       status: "error",
@@ -41,7 +41,11 @@ router.get("/:contactId", async (req, res, next) => {
 });
 
 router.post("/", async (req, res, next) => {
-  const contact = await addContact(req.body);
+  const contact = await addContact({
+    ...req.body,
+    owner: req.user._id,
+    favorite: req.body.favorite,
+  });
   const { error } = contactSchema.validate(req.body);
   if (error) {
     res.status(400).json({
@@ -62,7 +66,7 @@ router.post("/", async (req, res, next) => {
 
 router.delete("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
-  const contact = await removeContact(contactId);
+  const contact = await removeContact(contactId, req.user._id);
   if (!contact) {
     res.status(404).json({
       status: "error",
@@ -81,7 +85,7 @@ router.delete("/:contactId", async (req, res, next) => {
 router.put("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
   const { error } = contactSchema.validate(req.body);
-  const contact = await updateContact(contactId, req.body);
+  const contact = await updateContact(contactId, req.user._id, req.body);
   if (!contact) {
     res.status(404).json({
       status: "error",
@@ -107,7 +111,7 @@ router.put("/:contactId", async (req, res, next) => {
 router.patch("/:contactId/favorite", async (req, res, next) => {
   const { contactId } = req.params;
   const { error } = contactSchema.validate(req.body);
-  const contact = await updateStatusContact(contactId, req.body);
+  const contact = await updateStatusContact(contactId, req.user._id, req.body);
   if (!contact) {
     res.status(404).json({
       status: "error",
