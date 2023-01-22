@@ -2,11 +2,26 @@ const { User, registerSchema, loginSchema } = require("./schemas/userSchema");
 const gravatar = require("gravatar");
 const fs = require("fs").promises;
 const Jimp = require("jimp");
+const { v4: uuidv4 } = require("uuid");
+const sgMail = require("@sendgrid/mail");
+require("dotenv").config();
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const signup = async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, verificationToken } = req.body;
   const { error } = registerSchema.validate(req.body);
   const avatarUrl = gravatar.url(email);
+
+  const msg = {
+    to: email,
+    from: "sviatoslavamar@gmail.com",
+    subject: "Please, confirm you email",
+    text: `/users/verify/${verificationToken}`,
+    html: `<a href='http://localhost:3000/users/verify/${verificationToken}'>Confirm email</a>`,
+  };
+  await sgMail.send(msg);
+
   if (error) {
     res.status(400).json({
       status: "error",
@@ -30,7 +45,8 @@ const signup = async (req, res, next) => {
   }
 
   try {
-    const newUser = new User({ email, avatarUrl });
+    const verificationToken = uuidv4();
+    const newUser = new User({ email, avatarUrl, verificationToken });
     newUser.setPassword(password);
     await newUser.save();
     res.status(201).json({
@@ -59,6 +75,11 @@ const login = async (req, res, next) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email });
   const { error } = loginSchema.validate(req.body);
+
+    if (!user.verify) {
+    res.status(401).json({ message: "Not verified user" });
+    return
+  }
 
   if (error) {
     res.status(400).json({
@@ -89,6 +110,7 @@ const login = async (req, res, next) => {
     },
   });
 };
+
 const logout = async (req, res, next) => {
   const { _id } = req.user;
   await User.findByIdAndUpdate(_id, { token: null });
@@ -105,6 +127,7 @@ const getCurrent = async (req, res) => {
     },
   });
 };
+
 const updateSubscription = async (req, res) => {
   const { _id } = req.user;
   const { subscription } = req.body;
@@ -122,11 +145,53 @@ const updateAvatar = async (req, res, next) => {
   const { _id } = req.user;
   const { path } = req.file;
   const result = await Jimp.read(path);
-  result.cover(250, 250).write(`public/avatars/${_id}`);
+  result.resize(250, 250).write(`public/avatars/${_id}`);
   await fs.unlink(path);
   await User.findByIdAndUpdate(_id, { avatarURL: `/avatars/${_id}` });
   res.status(200).json({ avatarURL: `/avatars/${_id}` });
 };
+
+const verifyToken = async (req, res, next) => {
+  const { verificationToken } = req.params;
+  const user = await findOneAndUpdate(
+    { verificationToken, verify: false },
+    { verificationToken: null, verify: true },
+    { new: true }
+  );
+  if (!user) {
+    res.status(404).json({
+      status: "Not found",
+      code: 4004,
+      message: "User not found",
+    });
+  }
+  res.status(200).json({
+    status: "OK",
+    code: 200,
+    message: "Verification successful",
+  });
+};
+
+const verifyEmail = async (req, res, next) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ message: "missing required field email" });
+  }
+  const { verificationToken, verify } = await findOne({ email });
+  if (verify) {
+    res.status(400).json({ message: "Verification has already been passed" });
+  }
+  const msg = {
+    to: email,
+    from: "sviatoslavamar@gmail.com",
+    subject: "Please, confirm you email",
+    text: `/users/verify/:${verificationToken}`,
+    html: `<a href='http://localhost:3000/users/verify/:${verificationToken}'>Confirm</a>`,
+  };
+  await sgMail.send(msg);
+  res.status(200).json({ message: "Verification email sent" });
+};
+
 module.exports = {
   signup,
   login,
@@ -134,4 +199,6 @@ module.exports = {
   getCurrent,
   updateSubscription,
   updateAvatar,
+  verifyToken,
+  verifyEmail,
 };
